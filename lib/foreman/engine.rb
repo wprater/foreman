@@ -265,8 +265,30 @@ private
         end
         @running[pid] = [process, n]
         @readers[pid] = reader
+        write_pid_file(pid) if File.exist?("#{root}/tmp")
       end
     end
+  end
+
+  def write_pid_file(pid)
+    pid_dir = 'tmp'
+    pid_file_name = "#{name_for(pid)}.pid"
+    pid_file_path = "#{root}/#{pid_dir}/#{pid_file_name}"
+
+    fh = File.new(pid_file_path, 'w')
+    fh.sync = true
+    fh.puts(pid.to_s)
+    @running[pid].push(pid_file_path)
+    system "wrote pid #{pid} to #{pid_dir}/#{pid_file_name}"
+  rescue Errno::EACCES
+    system 'Cannot create PID file. Check the permissions and try again!'
+  ensure
+    fh.close
+  end
+
+  def delete_pid_file(pid)
+    File.delete(@running[pid][2])
+  rescue
   end
 
   def watch_for_output
@@ -289,6 +311,7 @@ private
   def watch_for_termination
     pid, status = Process.wait2
     output_with_mutex name_for(pid), termination_message_for(status)
+    delete_pid_file(pid)
     @running.delete(pid)
     yield if block_given?
     pid
